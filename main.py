@@ -10,7 +10,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Button
+from discord.ui import View, Button, TextInput, Modal
 
 # Optional Redis
 try:
@@ -18,7 +18,6 @@ try:
 except Exception:
     aioredis = None
 
-# Optional keepalive
 ENABLE_KEEPALIVE = os.getenv("ENABLE_KEEPALIVE", "false").lower() in ("1", "true", "yes")
 if ENABLE_KEEPALIVE:
     from flask import Flask
@@ -29,7 +28,7 @@ if ENABLE_KEEPALIVE:
 # -------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
-    raise SystemExit("ERROR: DISCORD_TOKEN missing")
+    raise SystemExit("ERROR: DISCORD_TOKEN environment variable is missing!")
 
 REDIS_URL = os.getenv("REDIS_URL")
 
@@ -41,63 +40,47 @@ STOCK_CHANNEL_ID = int(os.getenv("STOCK_CHANNEL_ID", "1446842923734794372"))
 TICKET_CATEGORY_ID = int(os.getenv("TICKET_CATEGORY_ID", "1445160237727224011"))
 
 COOLDOWN_FILE = "cooldowns.json"
-COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", str(12 * 60 * 60)))
+COOLDOWN_SECONDS = 60 * 60 * 12
+STOCK_FILE = "stock.json"
 
 # -------------------------
-# LOGGING
+# Logging
 # -------------------------
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("bot")
 
 # -------------------------
-# BOT SETUP
+# Bot Setup
 # -------------------------
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-redis_client = None
-if REDIS_URL and aioredis:
-    redis_client = aioredis.from_url(REDIS_URL)
+# -------------------------
+# ✅ NEW !fortnite COMMAND
+# -------------------------
+@bot.command()
+async def fortnite(ctx):
+    embed = discord.Embed(
+        title="🎮 Fortnite Accounts",
+        description="🔥 **High-quality Fortnite accounts available!**\n\n✅ Instant delivery\n✅ Full access\n✅ Safe & secure",
+        color=discord.Color.purple()
+    )
+
+    embed.add_field(name="💎 Stacked Accounts", value="$10+", inline=True)
+    embed.add_field(name="👑 OG / Rare Skins", value="Ask in ticket", inline=True)
+    embed.add_field(name="🎫 Warranty", value="Replacement available*", inline=False)
+
+    embed.set_footer(text="Create a ticket to purchase • Cash App / Crypto")
+
+    embed.set_image(
+        url="https://media.discordapp.net/attachments/1446850316090740847/1446855510266614041/Your_paragraph_text_4.png"
+    )
+
+    await ctx.send(embed=embed)
 
 # -------------------------
-# COOLDOWNS
-# -------------------------
-async def get_cooldown(user_id: int) -> float:
-    if redis_client:
-        v = await redis_client.hget("cooldowns", str(user_id))
-        return float(v) if v else 0.0
-    if not os.path.exists(COOLDOWN_FILE):
-        return 0.0
-    with open(COOLDOWN_FILE, "r") as f:
-        return float(json.load(f).get(str(user_id), 0.0))
-
-async def set_cooldown(user_id: int, t: float):
-    if redis_client:
-        await redis_client.hset("cooldowns", str(user_id), str(t))
-        return
-    data = {}
-    if os.path.exists(COOLDOWN_FILE):
-        with open(COOLDOWN_FILE, "r") as f:
-            data = json.load(f)
-    data[str(user_id)] = t
-    with open(COOLDOWN_FILE, "w") as f:
-        json.dump(data, f)
-
-# -------------------------
-# ROBLOX AVATAR
-# -------------------------
-async def get_avatar_from_userid(user_id: int):
-    url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=420x420&format=Png"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as r:
-            if r.status != 200:
-                return None, "API error"
-            data = await r.json()
-            return data["data"][0]["imageUrl"], None
-
-# -------------------------
-# TICKET VIEW
+# Ticket Button
 # -------------------------
 class TicketButton(View):
     def __init__(self):
@@ -106,119 +89,64 @@ class TicketButton(View):
     @discord.ui.button(label="Create Ticket", style=discord.ButtonStyle.green)
     async def create_ticket(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
+        user = interaction.user
+
         category = guild.get_channel(TICKET_CATEGORY_ID)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True),
+            user: discord.PermissionOverwrite(view_channel=True),
             guild.me: discord.PermissionOverwrite(view_channel=True),
         }
+
         channel = await guild.create_text_channel(
-            f"ticket-{interaction.user.name}",
-            category=category,
+            name=f"ticket-{user.name}",
             overwrites=overwrites,
+            category=category
         )
-        await interaction.response.send_message(f"Ticket created: {channel.mention}", ephemeral=True)
+
+        await interaction.response.send_message(f"✅ Ticket created: {channel.mention}", ephemeral=True)
+        await channel.send(f"🎟 Welcome {user.mention}! Tell us what you want to buy.")
 
 # -------------------------
-# SHOP
+# !shop COMMAND
 # -------------------------
 @bot.command()
 async def shop(ctx):
     embed = discord.Embed(
         title="🛒 My Shop",
-        description="Click **Create Ticket** to buy",
+        description="Click **Create Ticket** to order",
         color=discord.Color.blue()
     )
+    embed.add_field(name="Discord Nitro", value="$4", inline=True)
+    embed.add_field(name="Roblox 1k Follows", value="$2", inline=True)
+    embed.add_field(name="Fortnite Accounts", value="Use `!fortnite`", inline=True)
+
     await ctx.send(embed=embed, view=TicketButton())
 
 # -------------------------
-# ✅ FORTNITE COMMAND
-# -------------------------
-@bot.command()
-async def fortnite(ctx):
-    embed = discord.Embed(
-        title="Revera – AI Aimbot / Aim Assist",
-        description=(
-            "**AI-powered aim assistance for Fortnite**\n"
-            "External, undetectable, and future-safe."
-        ),
-        color=discord.Color.from_rgb(124, 58, 237)
-    )
-
-    embed.add_field(
-        name="Why Us?",
-        value=(
-            "• Windows 10 & 11\n"
-            "• KBM & Controller\n"
-            "• NVIDIA / AMD / Intel\n"
-            "• Low-end PC friendly\n"
-            "• Private builds\n"
-            "• 24/7 Support"
-        ),
-        inline=False
-    )
-
-    embed.add_field(
-        name="Features",
-        value=(
-            "**Aim Assist** – FOV, Strength, Hitbox\n"
-            "**Triggerbot** – Delay, Auto Fire\n"
-            "**Prediction** – Accurate tracking\n"
-            "**Anti-Recoil** – Custom strength\n"
-            "**Visuals** – FOV, Box, Crosshair"
-        ),
-        inline=False
-    )
-
-    embed.add_field(
-        name="Pricing",
-        value=(
-            "€19.90 – 1 Week\n"
-            "€29.90 – 1 Month\n"
-            "€49.90 – 3 Months\n"
-            "€79.90 – Lifetime"
-        ),
-        inline=True
-    )
-
-    embed.add_field(
-        name="Buy",
-        value="https://revera.cc/",
-        inline=True
-    )
-
-    embed.set_footer(text="© Revera 2025")
-    await ctx.send(embed=embed)
-
-# -------------------------
-# EVENTS
+# Events
 # -------------------------
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    log.info(f"Logged in as {bot.user}")
-
-@bot.event
-async def on_message(message: discord.Message):
-    if message.author.bot:
-        return
-    if message.channel.id == HELP_CHANNEL_ID:
-        await message.delete()
-        await message.author.send("Please use the help channel.")
-    await bot.process_commands(message)
+    log.info(f"✅ Bot ready as {bot.user}")
 
 # -------------------------
-# KEEPALIVE
+# Keepalive (optional)
 # -------------------------
 if ENABLE_KEEPALIVE:
-    app = Flask("alive")
+    app = Flask("keepalive")
+
     @app.route("/")
     def home():
-        return "alive"
-    Thread(target=lambda: app.run("0.0.0.0", int(os.getenv("PORT", 8080))), daemon=True).start()
+        return "Bot alive", 200
+
+    def run_flask():
+        app.run(host="0.0.0.0", port=int(os.getenv("PORT", 8080)))
+
+    Thread(target=run_flask).start()
 
 # -------------------------
-# RUN
+# Run
 # -------------------------
-if __name__ == "__main__":
-    bot.run(TOKEN)
+bot.run(TOKEN)
