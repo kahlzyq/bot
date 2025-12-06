@@ -1,11 +1,3 @@
-# Discord library
 discord.py>=2.3.2,<2.4.0
-
-# HTTP requests
 aiohttp>=3.8.5,<4.0.0
-
-# Flask for keep-alive server
 Flask>=2.3.3,<3.0.0
-
-# Optional: For better JSON handling (usually comes with Python)
-ujson>=5.8.0,<6.0.0
