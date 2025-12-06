@@ -41,8 +41,12 @@ HELP_CHANNEL_ID = int(os.getenv("HELP_CHANNEL_ID", "1429938869243215963"))
 WATCH_CHANNEL_ID = int(os.getenv("WATCH_CHANNEL_ID", "1444232893839970415"))
 TICKET_CATEGORY_ID = int(os.getenv("TICKET_CATEGORY_ID", "1445160237727224011"))
 
+GEN_CHANNEL_ID = 1446842783628525639
+STOCK_CHANNEL_ID = 1446842923734794372
+
 COOLDOWN_FILE = "cooldowns.json"
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", str(12 * 60 * 60)))  # default 12 hours
+STOCK_FILE = "stock.json"
 
 # -------------------------
 # Logging
@@ -86,7 +90,6 @@ async def get_cooldown(user_id: int) -> float:
             log.exception("Redis get_cooldown error")
             return 0.0
     else:
-        # file fallback (use thread IO to avoid blocking event loop)
         if not os.path.exists(COOLDOWN_FILE):
             return 0.0
         try:
@@ -106,8 +109,6 @@ async def set_cooldown(user_id: int, timestamp: float):
             return
         except Exception:
             log.exception("Redis set_cooldown error")
-            # fallthrough to file fallback
-    # file fallback write (may be ephemeral on Railway)
     try:
         def _write():
             data = {}
@@ -174,9 +175,7 @@ class TicketButton(View):
         if category is None:
             return await interaction.response.send_message("Ticket category not found. Contact an admin.", ephemeral=True)
 
-        # safer guild member fallback
         me = guild.get_member(bot.user.id) or guild.me
-
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
@@ -247,7 +246,6 @@ class FollowRequestView(View):
 
         await set_cooldown(self.requester_id, now)
 
-        # find process channel
         process_channel = bot.get_channel(PROCESS_CHANNEL_ID)
         if process_channel is None and interaction.guild:
             process_channel = interaction.guild.get_channel(PROCESS_CHANNEL_ID)
@@ -293,7 +291,7 @@ class FollowRequestView(View):
         await interaction.response.send_message("✅ Successfully sent request.", ephemeral=True)
 
 # -------------------------
-# Slash command
+# Slash command: roblox_follows
 # -------------------------
 @app_commands.command(name="roblox_follows", description="Order Roblox follows (Roblox ID required).")
 @app_commands.describe(roblox_id="The Roblox ID of the user", amount="Amount of follows (max 1000)")
@@ -330,11 +328,77 @@ async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amoun
 bot.tree.add_command(roblox_follows)
 
 # -------------------------
+# Stock management commands: /add, /gen, /stock
+# -------------------------
+def load_stock():
+    if not os.path.exists(STOCK_FILE):
+        return []
+    try:
+        with open(STOCK_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_stock(stock):
+    try:
+        with open(STOCK_FILE, "w") as f:
+            json.dump(stock, f)
+    except Exception:
+        log.exception("Failed to save stock")
+
+@app_commands.command(name="add", description="Add an account to the stock")
+@app_commands.describe(account="The account to add")
+async def add_account(interaction: discord.Interaction, account: str):
+    stock = load_stock()
+    stock.append(account)
+    save_stock(stock)
+    await interaction.response.send_message(f"✅ Added account to stock. Total accounts: {len(stock)}", ephemeral=True)
+
+@app_commands.command(name="gen", description="Generate an account from stock")
+async def gen(interaction: discord.Interaction):
+    if interaction.channel.id != GEN_CHANNEL_ID:
+        return await interaction.response.send_message("❌ You cannot use this command in this channel.", ephemeral=True)
+
+    stock = load_stock()
+    if not stock:
+        return await interaction.response.send_message("⚠️ Stock is empty.", ephemeral=True)
+
+    account = stock.pop(0)
+    save_stock(stock)
+    try:
+        await interaction.user.send(f"🎉 Here is your account:\n```\n{account}\n```")
+    except Exception:
+        return await interaction.response.send_message("❌ Could not DM you. Please check your privacy settings.", ephemeral=True)
+
+    await interaction.response.send_message("✅ Account has been sent to your DMs.", ephemeral=True)
+
+@app_commands.command(name="stock", description="Show the current stock")
+async def stock_cmd(interaction: discord.Interaction):
+    if interaction.channel.id != STOCK_CHANNEL_ID:
+        return await interaction.response.send_message("❌ You cannot use this command in this channel.", ephemeral=True)
+
+    stock = load_stock()
+    await interaction.response.send_message(f"📦 Current stock: {len(stock)} accounts.", ephemeral=True)
+
+# -------------------------
+# Command: Send embed text under bot name
+# -------------------------
+@app_commands.command(name="embedtext", description="Send a custom embed as the bot")
+@app_commands.describe(message="The text to send")
+async def embedtext(interaction: discord.Interaction, message: str):
+    embed = discord.Embed(description=message, color=discord.Color.green())
+    await interaction.response.send_message(embed=embed)
+
+bot.tree.add_command(add_account)
+bot.tree.add_command(gen)
+bot.tree.add_command(stock_cmd)
+bot.tree.add_command(embedtext)
+
+# -------------------------
 # Events
 # -------------------------
 @bot.event
 async def on_ready():
-    # small delay to allow the bot to populate guild cache on fast hosts
     await asyncio.sleep(2)
     try:
         await bot.tree.sync()
@@ -348,7 +412,6 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
     try:
-        # if WATCH_CHANNEL_ID matches
         if message.channel and getattr(message.channel, "id", None) == WATCH_CHANNEL_ID:
             try:
                 await message.delete()
@@ -363,7 +426,7 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
 # -------------------------
-# Optional keepalive (Flask) — only starts if ENABLE_KEEPALIVE true
+# Optional keepalive (Flask)
 # -------------------------
 if ENABLE_KEEPALIVE:
     app = Flask("alive")
@@ -372,19 +435,4 @@ if ENABLE_KEEPALIVE:
     def home():
         return "Bot is alive!"
 
-    def _run_flask():
-        port = int(os.getenv("PORT", "8080"))
-        app.run(host="0.0.0.0", port=port)
-
-    t = Thread(target=_run_flask, daemon=True)
-    t.start()
-    log.info("Keepalive Flask started on port %s", os.getenv("PORT", "8080"))
-
-# -------------------------
-# Run bot
-# -------------------------
-if __name__ == "__main__":
-    try:
-        bot.run(TOKEN)
-    except Exception:
-        log.exception("Bot failed to start")
+    def _run_flask
