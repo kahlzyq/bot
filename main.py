@@ -1,4 +1,4 @@
-# bot_combined_keepalive.py
+# main.py
 import discord
 import time
 import aiohttp
@@ -9,38 +9,30 @@ from discord import app_commands
 from discord.ui import View, Button
 
 # -------------------------
-# KEEP ALIVE IMPORTS
+# CONFIG
 # -------------------------
-from flask import Flask
-from threading import Thread
-
-# -------- CONFIG --------
-TOKEN = os.getenv("DISCORD_TOKEN")  # Railway env variable
-
+TOKEN = os.getenv("DISCORD_TOKEN")  # Railway environment variable
 if not TOKEN:
     raise SystemExit("ERROR: DISCORD_TOKEN environment variable is missing!")
-
 
 PROCESS_CHANNEL_ID = 1444234562224787557
 FINISH_CHANNEL_ID = 1444232893839970415
 COOLDOWN_FILE = "cooldowns.json"
 COOLDOWN_SECONDS = 12 * 60 * 60  # 12 hours
-REQUIRED_ROLE_ID = 1429552283120566332
 HELP_CHANNEL_ID = 1429938869243215963
 WATCH_CHANNEL_ID = 1444232893839970415
 
 # TICKET CATEGORY
 TICKET_CATEGORY_ID = 1445160237727224011
 
-# ------------------------
-
+# -------------------------
+# BOT SETUP
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -------------------------
-# LOAD COOLDOWNS
-# -------------------------
+# LOAD COOLDOWNS (ephemeral on Railway)
 if os.path.exists(COOLDOWN_FILE):
     try:
         with open(COOLDOWN_FILE, "r") as f:
@@ -59,7 +51,6 @@ def save_cooldowns():
 
 # -------------------------
 # HELPER: ROBLOX AVATAR
-# -------------------------
 async def get_avatar_from_userid(user_id: int):
     url = f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={user_id}&size=420x420&format=Png&isCircular=false"
     timeout = aiohttp.ClientTimeout(total=8)
@@ -78,7 +69,6 @@ async def get_avatar_from_userid(user_id: int):
 
 # -------------------------
 # TICKET BUTTON
-# -------------------------
 class TicketButton(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -87,8 +77,6 @@ class TicketButton(View):
     async def create_ticket(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
         user = interaction.user
-
-        # Get the category
         category = guild.get_channel(TICKET_CATEGORY_ID)
         if category is None:
             return await interaction.response.send_message("Ticket category not found.", ephemeral=True)
@@ -99,24 +87,17 @@ class TicketButton(View):
             guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
         }
 
-        # Create ticket inside category
         channel = await guild.create_text_channel(
             name=f"ticket-{user.name}",
             overwrites=overwrites,
             category=category
         )
 
-        await interaction.response.send_message(
-            f"Ticket created: {channel.mention}", ephemeral=True
-        )
-
-        await channel.send(
-            f"🎟 **Welcome {user.mention}!**\nTell me what you're trying to buy."
-        )
+        await interaction.response.send_message(f"Ticket created: {channel.mention}", ephemeral=True)
+        await channel.send(f"🎟 **Welcome {user.mention}!**\nTell me what you're trying to buy.")
 
 # -------------------------
 # SHOP COMMAND
-# -------------------------
 @bot.command()
 async def shop(ctx):
     embed = discord.Embed(
@@ -128,15 +109,12 @@ async def shop(ctx):
     embed.add_field(name="<:dc:1444172503487610911> Discord Nitro", value="$4", inline=True)
     embed.add_field(name="<:tt:1438660594134945903> TikTok 1k Follows", value="$3", inline=True)
     embed.add_field(name="<:ig:1438660723378094310> Instagram 1k Follows", value="$2", inline=True)
-
     embed.add_field(name="<:twitch:1439287452916515058> Twitch 1k Follows", value="$1.50", inline=True)
     embed.add_field(name="<:twitter:1439288496622801036> Twitter/X 1k Follows", value="$2", inline=True)
     embed.add_field(name="<:robux:1444447545647562822> Robux 1k", value="$6", inline=True)
-
     embed.add_field(name="<:spotify:1439288932217917593> Spotify 1k Follows", value="$1.30", inline=True)
     embed.add_field(name="<:verify:1440932076848287825> Roblox 1k Follows", value="$2", inline=True)
     embed.add_field(name="\u200b", value="\u200b", inline=True)
-
     embed.set_footer(text="Cash App & Crypto Only • Ask for likes/views prices")
 
     view = TicketButton()
@@ -144,7 +122,6 @@ async def shop(ctx):
 
 # -------------------------
 # FOLLOW REQUEST VIEW
-# -------------------------
 class FollowRequestView(View):
     def __init__(self, requester_id: int, roblox_id: int, amount: int):
         super().__init__(timeout=None)
@@ -214,7 +191,6 @@ class FollowRequestView(View):
 
 # -------------------------
 # SLASH COMMAND
-# -------------------------
 @app_commands.command(name="roblox_follows", description="Order Roblox follows (Roblox ID required).")
 @app_commands.describe(roblox_id="The Roblox ID of the user", amount="Amount of follows (max 1000)")
 async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amount: int):
@@ -227,10 +203,12 @@ async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amoun
         hrs = remaining // 3600
         mins = (remaining % 3600) // 60
         return await interaction.response.send_message(f"You can submit another request in {hrs}h {mins}m.", ephemeral=True)
+
     await interaction.response.defer(ephemeral=True)
     avatar_url, err = await get_avatar_from_userid(roblox_id)
     if err:
         return await interaction.followup.send(f"Error fetching Roblox avatar: {err}", ephemeral=True)
+
     embed = discord.Embed(
         title="📈 Roblox Follows",
         color=discord.Color.blurple(),
@@ -241,6 +219,7 @@ async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amoun
     embed.add_field(name="Estimated Time", value="10 min start — 20 min delivery", inline=False)
     embed.set_thumbnail(url=avatar_url)
     embed.set_footer(text="You can submit a request once every 12 hours.")
+
     view = FollowRequestView(interaction.user.id, roblox_id, amount)
     await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
@@ -248,7 +227,6 @@ bot.tree.add_command(roblox_follows)
 
 # -------------------------
 # EVENTS
-# -------------------------
 @bot.event
 async def on_ready():
     try:
@@ -268,27 +246,11 @@ async def on_message(message: discord.Message):
         except Exception:
             pass
         try:
-            await message.author.send(
-                f"⚠️ If you need help, please ask in <#{HELP_CHANNEL_ID}>"
-            )
+            await message.author.send(f"⚠️ If you need help, please ask in <#{HELP_CHANNEL_ID}>")
         except Exception:
             pass
     await bot.process_commands(message)
 
 # -------------------------
-# KEEP ALIVE WEB SERVER
-# -------------------------
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is alive!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-t = Thread(target=run)
-t.start()
-
-# -------------------------
+# RUN BOT
 bot.run(TOKEN)
