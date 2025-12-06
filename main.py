@@ -435,4 +435,7 @@ if ENABLE_KEEPALIVE:
     def home():
         return "Bot is alive!"
 
-    def _run_flask
+def _run_flask():
+    port = int(os.getenv("PORT", "8080"))
+    app.run(host="0.0.0.0", port=port)
+
