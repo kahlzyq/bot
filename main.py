@@ -314,7 +314,83 @@ async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amoun
 
     view = FollowRequestView(interaction.user.id, roblox_id, amount)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+# -------------------------
+# !fortnite command
+# -------------------------
+@bot.command()
+async def fortnite(ctx):
+    embed = discord.Embed(
+        title="Revera – AI Aimbot / Aim Assist",
+        description=(
+            "**Revera uses AI object detection for real-time enemy tracking, "
+            "providing an undetectable aim assist without interacting with game files, "
+            "ensuring it's undetectable and future-safe.**"
+        ),
+        color=0x7C3AED  # purple
+    )
 
+    embed.add_field(
+        name="Why Us?",
+        value=(
+            "• Working on Windows 10 & 11\n"
+            "• Working with KBM & Controller\n"
+            "• Supports NVIDIA, AMD & Intel GPU\n"
+            "• Compatible with low-end PCs\n"
+            "• Private builds for each user\n"
+            "• User-friendly interface\n"
+            "• 24/7 Dedicated Support\n"
+            "• Safe – external hardware"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Features",
+        value=(
+            "**Aim Assist**\n"
+            "• Customizable FOV / Strength / Hitbox / Auto Aim / Keybinds\n\n"
+            "**Triggerbot**\n"
+            "• Customizable Delay / Auto Fire / Keybind\n\n"
+            "**Prediction**\n"
+            "• Highly accurate\n\n"
+            "**Anti-Recoil**\n"
+            "• Customizable Strength / Auto Recoil / Keybind\n\n"
+            "**Custom Slots**\n"
+            "• Set different settings for each slot\n\n"
+            "**Visuals**\n"
+            "• Show FOV / Box / Aim Line / Crosshair / Info\n"
+            "• Customizable colors\n\n"
+            "**Configs**\n"
+            "• Easily share / save / load community-made configs\n\n"
+            "**Screen Capture**\n"
+            "• DXGI / GDI\n\n"
+            "**GPU Runtime**\n"
+            "• NVIDIA FP16 / FP32 / AMD"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="Pricing",
+        value=(
+            "• €19.90 – 1 Week\n"
+            "• €29.90 – 1 Month\n"
+            "• €49.90 – 3 Months\n"
+            "• €79.90 – Lifetime"
+        ),
+        inline=True
+    )
+
+    embed.add_field(
+        name="How To Buy?",
+        value="Visit **https://revera.cc/** or create a ticket.",
+        inline=True
+    )
+
+    embed.set_footer(text="© Revera 2025 | All rights reserved")
+
+    await ctx.send(embed=embed)
+    
 # -------------------------
 # Events
 # -------------------------
@@ -342,3 +418,4 @@ async def on_message(message: discord.Message):
 # -------------------------
 if __name__ == "__main__":
     bot.run(TOKEN)
+
