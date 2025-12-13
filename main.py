@@ -338,45 +338,43 @@ async def roblox_follows(interaction: discord.Interaction, roblox_id: int, amoun
 bot.tree.add_command(roblox_follows)
 
 # -------------------------
-# /add, /gen, /stock commands
+# /add command (MODAL — multiline stock import)
 # -------------------------
-@app_commands.command(name="add", description="Add an account to the stock")
-@app_commands.describe(account="The account to add to stock")
-async def add(interaction: discord.Interaction, account: str):
-    stock = load_stock()
-    stock.append(account)
-    save_stock(stock)
-    await interaction.response.send_message(f"✅ Added account to stock. Total stock: {len(stock)}", ephemeral=True)
-bot.tree.add_command(add)
-
-@app_commands.command(name="gen", description="Generate an account from the stock")
-async def gen(interaction: discord.Interaction):
-    if interaction.channel.id != GEN_CHANNEL_ID:
-        return await interaction.response.send_message("You cannot use /gen in this channel.", ephemeral=True)
-    stock = load_stock()
-    if not stock:
-        return await interaction.response.send_message("❌ Stock is empty.", ephemeral=True)
-    account = stock.pop(0)
-    save_stock(stock)
-    try:
-        await interaction.user.send(f"🎉 Your generated account: `{account}`")
-    except Exception:
-        return await interaction.response.send_message("❌ I could not DM you.", ephemeral=True)
-    await interaction.response.send_message("✅ Sent you an account via DM.", ephemeral=True)
-bot.tree.add_command(gen)
-
-@app_commands.command(name="stock", description="View current stock")
-async def stock(interaction: discord.Interaction):
-    if interaction.channel.id != STOCK_CHANNEL_ID:
-        return await interaction.response.send_message("You cannot use /stock in this channel.", ephemeral=True)
-    stock_data = load_stock()
-    embed = discord.Embed(
-        title="📦 Stock",
-        description=f"Total accounts: {len(stock_data)}",
-        color=discord.Color.green()
+class AddStockModal(Modal, title="Add Stock Accounts"):
+    accounts_input = TextInput(
+        label="Accounts (one per line)",
+        style=discord.TextStyle.paragraph,
+        placeholder="email:pass\nemail2:pass2\nemail3:pass3",
+        required=True
     )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-bot.tree.add_command(stock)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        raw_lines = self.accounts_input.value.splitlines()
+
+        # Clean input (remove empty lines)
+        accounts = [line.strip() for line in raw_lines if line.strip()]
+
+        if not accounts:
+            return await interaction.response.send_message(
+                "❌ No valid accounts provided.",
+                ephemeral=True
+            )
+
+        stock = load_stock()
+        stock.extend(accounts)
+        save_stock(stock)
+
+        await interaction.response.send_message(
+            f"✅ Added **{len(accounts)}** accounts.\n📦 Total stock: **{len(stock)}**",
+            ephemeral=True
+        )
+
+
+@app_commands.command(name="add", description="Add multiple accounts to the stock")
+async def add(interaction: discord.Interaction):
+    await interaction.response.send_modal(AddStockModal())
+
+bot.tree.add_command(add)
 
 # -------------------------
 # /embed command with modal for multi-line
@@ -454,4 +452,5 @@ if ENABLE_KEEPALIVE:
 # Run bot
 # -------------------------
 bot.run(TOKEN)
+
 
