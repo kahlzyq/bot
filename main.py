@@ -46,6 +46,9 @@ COOLDOWN_FILE = "cooldowns.json"
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", str(12 * 60 * 60)))  # default 12 hours
 STOCK_FILE = "stock.json"
 
+GEN_COOLDOWN_SECONDS = 30 * 60  # 30 minutes
+GEN_MAX = 2  # Max accounts per 30 minutes
+
 # -------------------------
 # Logging
 # -------------------------
@@ -232,12 +235,6 @@ async def shop(ctx):
     await ctx.send(embed=embed, view=view)
 
 # -------------------------
-# /roblox_follows command and view
-# -------------------------
-# (kept exactly like original — not changing anything)
-# ...[omitted here for brevity in this explanation; in the full file it stays unchanged]...
-
-# -------------------------
 # /embed modal
 # -------------------------
 class EmbedModal(Modal, title="Create an Embed"):
@@ -282,7 +279,7 @@ async def embed(interaction: discord.Interaction):
 bot.tree.add_command(embed)
 
 # -------------------------
-# 🔥 UPDATED /add command with modal
+# /add command modal
 # -------------------------
 class AddStockModal(Modal, title="Add Accounts to Stock"):
     accounts_input = TextInput(
@@ -316,11 +313,8 @@ async def add(interaction: discord.Interaction):
 bot.tree.add_command(add)
 
 # -------------------------
-# /gen command
+# /gen command with 2-per-30min cooldown
 # -------------------------
-GEN_COOLDOWN_SECONDS = 30 * 60  # 30 minutes
-GEN_MAX = 2  # Max accounts per 30 minutes
-
 @app_commands.command(name="gen", description="Generate an account from the stock")
 async def gen(interaction: discord.Interaction):
     if interaction.channel.id != GEN_CHANNEL_ID:
@@ -372,6 +366,7 @@ async def gen(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"✅ Sent you an account via DM. ({count}/{GEN_MAX} used in this 30min window)", ephemeral=True)
 
+bot.tree.add_command(gen)
 
 # -------------------------
 # /stock command
@@ -422,4 +417,3 @@ if ENABLE_KEEPALIVE:
 # Run bot
 # -------------------------
 bot.run(TOKEN)
-
