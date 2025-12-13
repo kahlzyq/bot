@@ -318,22 +318,60 @@ bot.tree.add_command(add)
 # -------------------------
 # /gen command
 # -------------------------
+GEN_COOLDOWN_SECONDS = 30 * 60  # 30 minutes
+GEN_MAX = 2  # Max accounts per 30 minutes
+
 @app_commands.command(name="gen", description="Generate an account from the stock")
 async def gen(interaction: discord.Interaction):
     if interaction.channel.id != GEN_CHANNEL_ID:
         return await interaction.response.send_message("You cannot use /gen in this channel.", ephemeral=True)
+
+    now = time.time()
+
+    # Load cooldown data for this user
+    data = {}
+    if os.path.exists(COOLDOWN_FILE):
+        with open(COOLDOWN_FILE, "r") as f:
+            data = json.load(f)
+
+    user_cd = data.get(str(interaction.user.id), [0, 0])  # [window_start, count]
+    window_start, count = user_cd
+
+    # If outside the 30-min window, reset
+    if now - window_start > GEN_COOLDOWN_SECONDS:
+        window_start = now
+        count = 0
+
+    if count >= GEN_MAX:
+        remaining = int(GEN_COOLDOWN_SECONDS - (now - window_start))
+        mins = remaining // 60
+        secs = remaining % 60
+        return await interaction.response.send_message(
+            f"❌ You can only generate 2 accounts every 30 minutes.\n⏱ Try again in {mins}m {secs}s.",
+            ephemeral=True
+        )
+
+    # Generate account
     stock = load_stock()
     if not stock:
         return await interaction.response.send_message("❌ Stock is empty.", ephemeral=True)
+
     account = stock.pop(0)
     save_stock(stock)
+
+    # Update cooldown
+    count += 1
+    data[str(interaction.user.id)] = [window_start, count]
+    with open(COOLDOWN_FILE, "w") as f:
+        json.dump(data, f)
+
     try:
         await interaction.user.send(f"🎉 Your generated account: `{account}`")
     except Exception:
         return await interaction.response.send_message("❌ I could not DM you.", ephemeral=True)
-    await interaction.response.send_message("✅ Sent you an account via DM.", ephemeral=True)
 
-bot.tree.add_command(gen)
+    await interaction.response.send_message(f"✅ Sent you an account via DM. ({count}/{GEN_MAX} used in this 30min window)", ephemeral=True)
+
 
 # -------------------------
 # /stock command
@@ -384,3 +422,4 @@ if ENABLE_KEEPALIVE:
 # Run bot
 # -------------------------
 bot.run(TOKEN)
+
